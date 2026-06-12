@@ -1,36 +1,34 @@
-"""
-warren.py
-Motor de cálculo estructural para puente de armadura tipo Warren.
-Completamente independiente de cualquier librería de interfaz gráfica.
-Compatible con Python 3.11+
-"""
+# ============================================================
+#  warren.py  —  Motor de cálculo: Armadura Tipo Warren
+#  Método de secciones | Factor de seguridad FS = 1.67
+# ============================================================
 
-from __future__ import annotations
-
-import json
 import math
+import json
 import os
 from datetime import datetime
-from typing import Any
+from typing import Optional
 
-# ── CONSTANTES DE MATERIALES ────────────────────────────────────────────────
+HISTORY_FILE = os.path.join(os.getcwd(), "history.json")
 
-MATERIALS: dict[str, dict[str, float]] = {
+MATERIALS: dict[str, dict] = {
     "Acero A36":     {"Fy_MPa": 250.0},
     "Acero A572":    {"Fy_MPa": 345.0},
     "Aluminio 6061": {"Fy_MPa": 276.0},
 }
 
-HISTORY_FILE = os.path.join(os.getcwd(), "history.json")
-
 
 # ── MOTOR DE CÁLCULO ────────────────────────────────────────────────────────
-
 class WarrenTruss:
     """
-    Calcula fuerzas internas, reacciones y evaluación de seguridad
-    de una armadura tipo Warren simétrica con carga distribuida
-    en nodos del cordón superior.
+    Armadura simétrica tipo Warren.
+
+    Parámetros
+    ----------
+    L       : Longitud total (m)
+    H       : Altura (m)
+    panels  : Número de paneles (2-20)
+    P_total : Carga total aplicada en nodos superiores (kN)
     """
 
     def __init__(self, L: float, H: float, panels: int, P_total: float) -> None:
@@ -38,38 +36,29 @@ class WarrenTruss:
         self.H = H
         self.panels = panels
         self.P_total = P_total
-        self.results: dict[str, Any] = {}
+        self.results: dict = {}
         self._analyze()
 
-    # ── ANÁLISIS ESTRUCTURAL ─────────────────────────────────────────────
-
+    # ── análisis por método de secciones ────────────────────────────────────
     def _analyze(self) -> None:
-        """
-        Método de secciones para armadura Warren simétrica.
-        Distribución uniforme de carga en nodos intermedios superiores.
-        """
         L, H, n, Pt = self.L, self.H, self.panels, self.P_total
 
-        # Geometría básica
-        d         = L / n                          # longitud de panel
-        diag_len  = math.hypot(d, H)               # longitud diagonal
-        sin_a     = H / diag_len                   # seno del ángulo diagonal
-        angle_deg = math.degrees(math.atan2(H, d)) # ángulo en grados
+        d          = L / n                          # longitud de panel
+        diag_len   = math.hypot(d, H)               # longitud diagonal
+        sin_a      = H / diag_len
+        angle_deg  = math.degrees(math.atan2(H, d))
+        load_nodes = n - 1                          # nodos interiores con carga
+        P_node     = Pt / load_nodes                # carga por nodo
+        Ra = Rb    = Pt / 2                         # reacciones simétricas
 
-        # Distribución de carga
-        load_nodes = n - 1                         # nodos intermedios superiores
-        P_node     = Pt / load_nodes               # carga por nodo
-        Ra = Rb    = Pt / 2.0                      # reacciones (simetría)
-
-        # Diagrama de cortante
-        V: list[float] = []
-        shear = Ra
+        # diagrama de cortante
+        V, shear = [], Ra
         for i in range(n):
             V.append(shear)
             if i < load_nodes:
                 shear -= P_node
 
-        # Fuerzas en cordón inferior (tensión) — método de secciones
+        # fuerzas en cordón inferior (tensión positiva)
         bot_forces: list[float] = []
         for i in range(n):
             x_right = (i + 1) * d
@@ -79,7 +68,7 @@ class WarrenTruss:
                     M -= P_node * (j * d)
             bot_forces.append(M / H)
 
-        # Fuerzas en cordón superior (compresión) — método de secciones
+        # fuerzas en cordón superior (compresión negativa)
         top_forces: list[float] = []
         for i in range(n):
             x_mid = (i + 0.5) * d
@@ -90,40 +79,40 @@ class WarrenTruss:
             )
             top_forces.append(-M / H)
 
-        # Fuerzas en diagonales — equilibrio vertical
+        # fuerzas en diagonales
         diag_forces: list[float] = [V[i] / sin_a for i in range(n)]
 
-        # Construcción del listado de miembros
-        members: list[dict[str, Any]] = []
+        # construir lista de miembros
+        members: list[dict] = []
 
         for i, f in enumerate(top_forces):
             members.append({
-                "id":         f"CS{i+1}",
-                "name":       f"Cordon Superior {i+1}",
-                "type":       "top_chord",
-                "force":      round(f, 3),
-                "length":     round(d, 3),
-                "stress_type": "Compresion" if f < 0 else "Tension",
+                "id":          f"CS{i+1}",
+                "name":        f"Cordón Superior {i+1}",
+                "type":        "top_chord",
+                "force":       round(f, 3),
+                "length":      round(d, 3),
+                "stress_type": "Compresión" if f < 0 else "Tensión",
             })
 
         for i, f in enumerate(bot_forces):
             members.append({
-                "id":         f"CI{i+1}",
-                "name":       f"Cordon Inferior {i+1}",
-                "type":       "bot_chord",
-                "force":      round(f, 3),
-                "length":     round(d, 3),
-                "stress_type": "Tension" if f > 0 else "Compresion",
+                "id":          f"CI{i+1}",
+                "name":        f"Cordón Inferior {i+1}",
+                "type":        "bot_chord",
+                "force":       round(f, 3),
+                "length":      round(d, 3),
+                "stress_type": "Tensión" if f > 0 else "Compresión",
             })
 
         for i, f in enumerate(diag_forces):
             members.append({
-                "id":         f"D{i+1}",
-                "name":       f"Diagonal {i+1}",
-                "type":       "diagonal",
-                "force":      round(f, 3),
-                "length":     round(diag_len, 3),
-                "stress_type": "Tension" if f > 0 else "Compresion",
+                "id":          f"D{i+1}",
+                "name":        f"Diagonal {i+1}",
+                "type":        "diagonal",
+                "force":       round(f, 3),
+                "length":      round(diag_len, 3),
+                "stress_type": "Tensión" if f > 0 else "Compresión",
             })
 
         self.results = {
@@ -143,94 +132,85 @@ class WarrenTruss:
             "timestamp": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
         }
 
-    # ── EVALUACIÓN DE SEGURIDAD ──────────────────────────────────────────
-
+    # ── evaluación de seguridad ──────────────────────────────────────────────
     def evaluate_safety(
         self,
         material: str = "Acero A36",
         section_area_cm2: float = 50.0,
-    ) -> dict[str, Any]:
+    ) -> dict:
         """
-        Evalúa cada miembro contra el esfuerzo admisible.
-        Factor de seguridad: FS = 1.67 (AISC ASD)
+        Verifica esfuerzos admisibles con FS = 1.67.
+
+        Retorna dict con veredicto, evaluaciones por miembro y sugerencias.
         """
         Fy_MPa       = MATERIALS.get(material, MATERIALS["Acero A36"])["Fy_MPa"]
         allowable_MPa = Fy_MPa / 1.67
-        A_mm2         = section_area_cm2 * 100.0  # cm² → mm²
+        A_mm2         = section_area_cm2 * 100.0   # cm² → mm²
 
-        member_evals: list[dict[str, Any]] = []
-        critical:     list[str] = []
-        warnings:     list[str] = []
+        member_evals: list[dict] = []
+        critical: list[str]      = []
+        warnings: list[str]      = []
 
         for m in self.results["members"]:
-            F_N       = abs(m["force"]) * 1000.0          # kN → N
+            F_N       = abs(m["force"]) * 1000.0        # kN → N
             sigma_MPa = F_N / A_mm2
             ratio     = sigma_MPa / allowable_MPa
 
             if ratio > 1.0:
-                status = "FALLA"
-                color  = "danger"
+                status, color = "FALLA",  "danger"
                 critical.append(m["id"])
             elif ratio > 0.85:
-                status = "LIMITE"
-                color  = "warn"
+                status, color = "LÍMITE", "warn"
                 warnings.append(m["id"])
             else:
-                status = "SEGURO"
-                color  = "safe"
+                status, color = "SEGURO", "safe"
 
             member_evals.append({
                 **m,
-                "sigma_MPa":     round(sigma_MPa, 2),
-                "allowable_MPa": round(allowable_MPa, 2),
-                "ratio":         round(ratio, 3),
-                "status":        status,
-                "color":         color,
+                "sigma_MPa":      round(sigma_MPa, 2),
+                "allowable_MPa":  round(allowable_MPa, 2),
+                "ratio":          round(ratio, 3),
+                "status":         status,
+                "color":          color,
             })
 
-        # Veredicto global
         if critical:
-            verdict  = "PELIGROSO"
-            v_level  = "danger"
+            verdict, v_level = "PELIGROSO",  "danger"
         elif warnings:
-            verdict  = "PRECAUCION"
-            v_level  = "warn"
+            verdict, v_level = "PRECAUCIÓN", "warn"
         else:
-            verdict  = "SEGURO"
-            v_level  = "safe"
+            verdict, v_level = "SEGURO",     "safe"
 
         suggestions = self._suggestions(
             critical, warnings, member_evals,
-            section_area_cm2, allowable_MPa, material,
+            section_area_cm2, allowable_MPa, material
         )
 
         return {
-            "verdict":          verdict,
-            "v_level":          v_level,
-            "material":         material,
-            "section_area_cm2": round(section_area_cm2, 1),
-            "Fy_MPa":           round(Fy_MPa, 0),
-            "allowable_MPa":    round(allowable_MPa, 1),
-            "critical_members": critical,
-            "warning_members":  warnings,
-            "member_evals":     member_evals,
-            "suggestions":      suggestions,
+            "verdict":           verdict,
+            "v_level":           v_level,
+            "material":          material,
+            "section_area_cm2":  round(section_area_cm2, 1),
+            "Fy_MPa":            round(Fy_MPa, 0),
+            "allowable_MPa":     round(allowable_MPa, 1),
+            "critical_members":  critical,
+            "warning_members":   warnings,
+            "member_evals":      member_evals,
+            "suggestions":       suggestions,
         }
 
-    # ── SUGERENCIAS DE DISEÑO ────────────────────────────────────────────
-
+    # ── sugerencias de diseño ────────────────────────────────────────────────
     def _suggestions(
         self,
-        critical:     list[str],
-        warnings:     list[str],
-        evals:        list[dict[str, Any]],
-        area_cm2:     float,
+        critical: list[str],
+        warnings: list[str],
+        evals: list[dict],
+        area_cm2: float,
         allowable_MPa: float,
-        material:     str,
+        material: str,
     ) -> list[str]:
-        """Genera sugerencias de diseño según el estado de la estructura."""
         s: list[str] = []
-        hl = self.results["H"] / self.results["L"]   # relación altura / luz
+        hl = self.results["H"] / self.results["L"]
 
         if critical:
             F_max_N   = max(abs(e["force"]) for e in evals) * 1000.0
@@ -247,42 +227,31 @@ class WarrenTruss:
             s.append("Miembros cercanos al límite — revisar cargas de servicio")
             s.append("Aumentar sección en 15-20% para mayor margen de seguridad")
         else:
-            s.append("Diseño dentro de parámetros admisibles ✓")
-            max_r = max(e["ratio"] for e in evals) if evals else 0
-            area_opt = area_cm2 * max_r * 1.10
+            s.append("✅ Diseño dentro de parámetros admisibles")
+            max_r     = max(e["ratio"] for e in evals) if evals else 0
+            area_opt  = area_cm2 * max_r * 1.10
             if area_opt < area_cm2 * 0.80:
                 s.append(
-                    f"Podría optimizar la sección a ~{area_opt:.1f} cm² "
-                    f"(ahorro de material)"
+                    f"💡 Puede optimizar la sección a ~{area_opt:.1f} cm² (ahorro de material)"
                 )
 
         if hl < 0.08:
-            s.append(
-                f"Relación H/L = {hl:.2f} muy baja — "
-                f"riesgo de pandeo lateral"
-            )
+            s.append(f"⚠️ Relación H/L = {hl:.2f} muy baja — riesgo de pandeo lateral")
         elif hl > 0.20:
-            s.append(
-                f"Relación H/L = {hl:.2f} elevada — "
-                f"revisar cargas de viento"
-            )
+            s.append(f"⚠️ Relación H/L = {hl:.2f} elevada — revisar cargas de viento")
 
         return s
 
 
-# ── GESTOR DE HISTORIAL ──────────────────────────────────────────────────────
-
+# ── HISTORIAL ────────────────────────────────────────────────────────────────
 class HistoryManager:
-    """
-    Persiste los resultados de cálculo en un archivo JSON local.
-    Compatible con Streamlit Cloud (usa directorio de trabajo).
-    """
+    """Lee y escribe el historial en history.json."""
 
-    def __init__(self, filepath: str = HISTORY_FILE) -> None:
-        self.fp      = filepath
+    def __init__(self, fp: str = HISTORY_FILE) -> None:
+        self.fp      = fp
         self.records = self._load()
 
-    def _load(self) -> list[dict[str, Any]]:
+    def _load(self) -> list[dict]:
         if os.path.exists(self.fp):
             try:
                 with open(self.fp, "r", encoding="utf-8") as f:
@@ -291,23 +260,15 @@ class HistoryManager:
                 return []
         return []
 
-    def save(self, entry: dict[str, Any]) -> None:
+    def save(self, entry: dict) -> None:
         self.records.append(entry)
-        try:
-            with open(self.fp, "w", encoding="utf-8") as f:
-                json.dump(self.records, f, indent=2, ensure_ascii=False)
-        except OSError:
-            # En entornos de solo lectura, el historial solo vive en memoria
-            pass
+        with open(self.fp, "w", encoding="utf-8") as f:
+            json.dump(self.records, f, indent=2, ensure_ascii=False)
 
     def clear(self) -> None:
         self.records = []
-        try:
-            if os.path.exists(self.fp):
-                os.remove(self.fp)
-        except OSError:
-            pass
+        if os.path.exists(self.fp):
+            os.remove(self.fp)
 
-    def get_all(self) -> list[dict[str, Any]]:
-        """Devuelve registros en orden cronológico inverso (más reciente primero)."""
+    def get_all(self) -> list[dict]:
         return list(reversed(self.records))

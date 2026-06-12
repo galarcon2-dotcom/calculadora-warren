@@ -1,12 +1,8 @@
-# 🌉 Calculadora de Puente de Armadura Tipo Warren
+# 🏗️ Calculadora — Puente Armadura Tipo Warren
 
-Aplicación web de análisis estructural para armaduras tipo Warren, desarrollada con **Streamlit** y **Plotly**. Calcula fuerzas internas, reacciones en apoyos, evalúa la seguridad de cada miembro y genera sugerencias de diseño.
+**Proyecto Integrador · Ingeniería · UNICA**
 
----
-
-## 🖥️ Demo en vivo
-
-> Despliega tu propia instancia en **Streamlit Cloud** siguiendo los pasos de la sección [Despliegue](#-despliegue-en-streamlit-cloud).
+Aplicación web desarrollada con **Streamlit** para el análisis estructural de armaduras planas simétricas tipo Warren, usando el **método de secciones** con verificación de esfuerzos admisibles.
 
 ---
 
@@ -14,19 +10,61 @@ Aplicación web de análisis estructural para armaduras tipo Warren, desarrollad
 
 | Módulo | Descripción |
 |---|---|
-| **Análisis estructural** | Método de secciones para armadura Warren simétrica |
-| **Reacciones** | Ra = Rb (carga simétrica distribuida en nodos superiores) |
-| **Cordón superior** | Fuerzas en todos los elementos del cordón superior |
-| **Cordón inferior** | Fuerzas en todos los elementos del cordón inferior |
-| **Diagonales** | Fuerzas en todas las diagonales (patrón W alternado) |
-| **Evaluación de seguridad** | Verificación contra esfuerzo admisible (FS = 1.67) |
-| **Sugerencias de diseño** | Recomendaciones automáticas según el estado |
-| **Diagrama interactivo** | Visualización Plotly con colores por tipo de esfuerzo |
-| **Historial** | Registro persistente en JSON con exportación CSV |
+| **Portada** | Página de bienvenida con diagrama animado y botón de ingreso |
+| **Cálculo** | Fuerzas internas: cordón superior, inferior y diagonales |
+| **Reacciones** | Ra y Rb por equilibrio estático |
+| **Seguridad** | Verificación con FS = 1.67, estados SEGURO / LÍMITE / FALLA |
+| **Diagrama** | Visualización interactiva con Plotly (tensión vs. compresión) |
+| **Historial** | Registro persistente en JSON, descarga CSV |
+| **Sugerencias** | Recomendaciones automáticas de diseño |
 
 ---
 
-## 📐 Materiales soportados
+## 🚀 Ejecución local
+
+```bash
+# 1. Clonar el repositorio
+git clone https://github.com/TU_USUARIO/calculadora-warren.git
+cd calculadora-warren
+
+# 2. Instalar dependencias
+pip install -r requirements.txt
+
+# 3. Ejecutar
+streamlit run app.py
+```
+
+La aplicación se abrirá en `http://localhost:8501`.
+
+---
+
+## 📁 Estructura del proyecto
+
+```
+calculadora-warren/
+├── app.py            ← Interfaz Streamlit (portada + calculadora)
+├── warren.py         ← Motor de cálculo (WarrenTruss, HistoryManager)
+├── requirements.txt  ← Dependencias para Streamlit Cloud
+├── history.json      ← Historial de cálculos (auto-generado)
+└── README.md
+```
+
+---
+
+## 🧮 Parámetros de entrada
+
+| Parámetro | Rango | Por defecto |
+|---|---|---|
+| Longitud total L | 1 – 500 m | 20 m |
+| Altura H | 0.5 – 100 m | 3 m |
+| Número de paneles | 2 – 20 | 6 |
+| Carga total P | > 0 kN | 500 kN |
+| Área de sección | > 0 cm² | 50 cm² |
+| Material | A36 / A572 / Al 6061 | Acero A36 |
+
+---
+
+## 🔩 Materiales soportados
 
 | Material | Fy (MPa) | σ_adm (MPa) |
 |---|---|---|
@@ -36,175 +74,36 @@ Aplicación web de análisis estructural para armaduras tipo Warren, desarrollad
 
 ---
 
-## 📁 Estructura del proyecto
+## 📐 Método de cálculo
 
-```
-calculadora-warren/
-│
-├── app.py            # Interfaz Streamlit (UI + lógica de presentación)
-├── warren.py         # Motor de cálculo estructural (sin dependencias de UI)
-├── requirements.txt  # Dependencias Python
-├── README.md         # Este archivo
-└── history.json      # Historial generado automáticamente (no versionar)
-```
-
----
-
-## 🚀 Ejecutar localmente
-
-### Requisitos previos
-- Python 3.11 o superior
-- pip
-
-### Pasos
-
-```bash
-# 1. Clonar el repositorio
-git clone https://github.com/TU_USUARIO/calculadora-warren.git
-cd calculadora-warren
-
-# 2. Crear entorno virtual (recomendado)
-python -m venv venv
-
-# En Windows:
-venv\Scripts\activate
-
-# En macOS / Linux:
-source venv/bin/activate
-
-# 3. Instalar dependencias
-pip install -r requirements.txt
-
-# 4. Ejecutar la aplicación
-streamlit run app.py
-```
-
-La aplicación se abrirá en `http://localhost:8501`.
+1. **Geometría**: se divide la longitud total `L` en `n` paneles de longitud `d = L/n`.
+2. **Cargas**: la carga total `P` se distribuye uniformemente en los `n-1` nodos interiores superiores.
+3. **Reacciones**: `Ra = Rb = P/2` (simetría).
+4. **Cordón inferior** (tensión): `F = M / H` por equilibrio de momentos.
+5. **Cordón superior** (compresión): `F = -M / H`.
+6. **Diagonales**: `F = V / sin(α)` con `V` la fuerza cortante en cada panel.
+7. **Esfuerzo**: `σ = F / A`; se compara con `σ_adm = Fy / 1.67`.
 
 ---
 
 ## ☁️ Despliegue en Streamlit Cloud
 
-### Paso 1 — Crear repositorio en GitHub
+Ver la sección de despliegue al final del README.
 
-1. Ve a [github.com](https://github.com) e inicia sesión.
-2. Haz clic en **"New repository"**.
-3. Nombre sugerido: `calculadora-warren`.
-4. Selecciona **Public** (necesario para el plan gratuito de Streamlit Cloud).
-5. **No** inicialices con README (ya lo tienes).
-6. Haz clic en **"Create repository"**.
-
-### Paso 2 — Subir los archivos
-
-**Opción A — Desde la línea de comandos (recomendado):**
-
-```bash
-# Dentro de la carpeta calculadora-warren/
-git init
-git add app.py warren.py requirements.txt README.md
-git commit -m "feat: calculadora Warren en Streamlit"
-git branch -M main
-git remote add origin https://github.com/TU_USUARIO/calculadora-warren.git
-git push -u origin main
-```
-
-**Opción B — Desde la interfaz web de GitHub:**
-
-1. Abre el repositorio recién creado.
-2. Haz clic en **"uploading an existing file"**.
-3. Arrastra los 4 archivos (`app.py`, `warren.py`, `requirements.txt`, `README.md`).
-4. Haz clic en **"Commit changes"**.
-
-> ⚠️ **Importante:** NO subas `history.json` al repositorio. El historial se genera en tiempo de ejecución.
-
-### Paso 3 — Conectar GitHub con Streamlit Cloud
-
-1. Ve a [share.streamlit.io](https://share.streamlit.io).
-2. Inicia sesión con tu cuenta de GitHub.
-3. Haz clic en **"New app"**.
-4. En el formulario:
-   - **Repository:** `TU_USUARIO/calculadora-warren`
-   - **Branch:** `main`
-   - **Main file path:** `app.py`
-5. Haz clic en **"Deploy!"**.
-
-### Paso 4 — Verificar el despliegue
-
-- Streamlit Cloud instalará automáticamente las dependencias del `requirements.txt`.
-- El proceso tarda entre 1 y 3 minutos.
-- Al terminar obtendrás una URL pública con el formato:
-  `https://TU_USUARIO-calculadora-warren-app-HASH.streamlit.app`
+1. Subir este repositorio a **GitHub** (público o privado).
+2. Ir a [share.streamlit.io](https://share.streamlit.io) → **New app**.
+3. Seleccionar repositorio, rama `main` y archivo `app.py`.
+4. Hacer clic en **Deploy**.
 
 ---
 
-## 🔧 Resolución de errores comunes
+## 👤 Autores
 
-### Error: `ModuleNotFoundError: No module named 'warren'`
-**Causa:** `warren.py` no está en el repositorio o en la misma carpeta que `app.py`.  
-**Solución:** Asegúrate de que ambos archivos están en la raíz del repositorio y fueron subidos correctamente.
-
----
-
-### Error: `ModuleNotFoundError: No module named 'plotly'`
-**Causa:** El `requirements.txt` no se subió o tiene errores de sintaxis.  
-**Solución:**
-1. Verifica que `requirements.txt` existe en la raíz.
-2. Comprueba que no tiene espacios ni caracteres especiales.
-3. En Streamlit Cloud, abre **"Manage app" → "Reboot app"** para forzar reinstalación.
+Proyecto Integrador — Facultad de Ingeniería · UNICA  
+Universidad Cardenal Miguel Obando Bravo
 
 ---
 
-### Error: `StreamlitAPIException` o pantalla en blanco
-**Causa:** Error de sintaxis en `app.py`.  
-**Solución:** Revisa los logs en Streamlit Cloud (botón **"Manage app"**) para ver el error exacto.
+## 📄 Licencia
 
----
-
-### El historial no persiste entre sesiones en Streamlit Cloud
-**Causa:** Streamlit Cloud reinicia los procesos periódicamente.  
-**Solución:** Esto es comportamiento esperado en el plan gratuito. Para persistencia real, puedes:
-- Usar `st.session_state` (ya implementado para la sesión activa).
-- Integrar una base de datos (Supabase, Firebase) en futuras versiones.
-
----
-
-### Error de permisos al escribir `history.json`
-**Causa:** El sistema de archivos de Streamlit Cloud puede ser de solo lectura en algunos directorios.  
-**Solución:** El código ya maneja esta excepción — el historial funcionará en memoria durante la sesión activa aunque no se persista en disco.
-
----
-
-## 🔬 Metodología de cálculo
-
-- **Modelo:** Armadura plana simplemente apoyada, carga puntual distribuida uniformemente en los **nodos intermedios del cordón superior**.
-- **Método:** Secciones (Ritter). La fuerza en cada miembro se calcula por equilibrio de momentos o fuerzas en la sección cortada.
-- **Factor de seguridad:** FS = 1.67 (AISC ASD — Allowable Stress Design).
-- **Esfuerzo admisible:** σ_adm = Fy / 1.67
-- **Criterio de falla:** ratio = σ / σ_adm > 1.0 → FALLA
-- **Criterio de advertencia:** ratio > 0.85 → LÍMITE
-
----
-
-## 📊 Parámetros de entrada
-
-| Parámetro | Símbolo | Rango | Unidad |
-|---|---|---|---|
-| Longitud total | L | 2 – 500 | m |
-| Altura | H | 0.5 – 100 | m |
-| Número de paneles | n | 2 – 20 | — |
-| Carga total | P | 1 – 1,000,000 | kN |
-| Área de sección | A | 1 – 5000 | cm² |
-| Material | — | A36 / A572 / Al6061 | — |
-
----
-
-## 📜 Licencia
-
-MIT License — libre para uso educativo y profesional.
-
----
-
-## 👤 Autor
-
-Desarrollado como herramienta de análisis estructural para puentes de armadura tipo Warren.  
-Conversión de Tkinter a Streamlit manteniendo toda la lógica de cálculo original.
+MIT License — libre para uso académico.
